@@ -45,6 +45,10 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
             return game.getPossibleActions().iterator().next();
         }
 
+        // 1. Initialize memory monitoring
+        Runtime runtime = Runtime.getRuntime();
+        long memoryThreshold = (long) (runtime.maxMemory() * 0.90);
+
         try {
             log.deb("MctsAgent: Adding information to the game");
             addInformationToGame(game);
@@ -55,12 +59,21 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
             MCTSNode.setPlayerId(this.playerId);
             MCTSNode tree = new MCTSNode(0, 0, game, null);
             log.deb("MctsAgent: Doing MCTS");
+            // 2. The combined safety loop
             while (!this.shouldStopComputation()) {
+
+                // Memory Safety Check: Stop if used memory exceeds 90%
+                if (runtime.totalMemory() - runtime.freeMemory() > memoryThreshold) {
+                    log.inf("MctsAgent: Memory threshold reached! Stopping search early.\n");
+                    break;
+                }
+
                 Pair<MCTSNode, HeimlichAndCoAction> selectionPair = mctsSelection(tree, SIMULATE_ALL_DIE_OUTCOMES);
                 MCTSNode newNode = mctsExpansion(selectionPair.getA(), selectionPair.getB());
                 int win = mctsSimulation(newNode);
                 mctsBackpropagation(newNode, win);
             }
+
             log.inf("MctsAgent: Playouts done from root node: " + tree.getPlayouts() + "\n");
             log.inf("MctsAgent: Wins/playouts from selected child node: " + tree.getBestChild().getA().getWins() + "/" + tree.getBestChild().getA().getPlayouts() + "\n");
             log.inf("MctsAgent: Q(s,a) of chosen action: " + tree.calculateQsaOfChild(tree.getBestChild().getB()) + "\n");
