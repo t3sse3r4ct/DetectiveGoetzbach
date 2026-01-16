@@ -146,9 +146,8 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
             if (TERMINATION_DEPTH >= 0 && simulationDepth >= TERMINATION_DEPTH) {
                 break;
             }
-            Set<HeimlichAndCoAction> possibleActions = game.getPossibleActions();
-            HeimlichAndCoAction selectedAction = possibleActions.toArray(new HeimlichAndCoAction[1])[super.random.nextInt(possibleActions.size())];
-            game.applyAction(selectedAction);
+
+            game.applyAction(calcBestOption(game));
             simulationDepth++;
         }
 
@@ -165,6 +164,13 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
         } else {
             return 0;
         }
+    }
+
+    //
+    //
+    private HeimlichAndCoAction calcBestOption(HeimlichAndCo game){
+
+        return null;
     }
 
 }
