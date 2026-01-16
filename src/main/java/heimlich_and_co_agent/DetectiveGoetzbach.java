@@ -3,9 +3,14 @@ package heimlich_and_co_agent;
 import at.ac.tuwien.ifs.sge.agent.AbstractGameAgent;
 import at.ac.tuwien.ifs.sge.agent.GameAgent;
 import at.ac.tuwien.ifs.sge.engine.Logger;
+import at.ac.tuwien.ifs.sge.game.ActionRecord;
 import at.ac.tuwien.ifs.sge.util.pair.Pair;
 import heimlich_and_co.HeimlichAndCo;
+import heimlich_and_co.HeimlichAndCoBoard;
 import heimlich_and_co.actions.HeimlichAndCoAction;
+import heimlich_and_co.actions.HeimlichAndCoAgentMoveAction;
+import heimlich_and_co.actions.HeimlichAndCoCardAction;
+import heimlich_and_co.cards.HeimlichAndCoCard;
 import heimlich_and_co.enums.Agent;
 
 import java.util.*;
@@ -22,6 +27,14 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
     // Trackers for rational decision-making
     private DiceTracker diceTracker;
     private CardTracker cardTracker;
+
+
+    // Tracks the board state incrementally to compare positions
+    private HeimlichAndCoBoard trackedBoard;
+    // Ensures we only process each ActionRecord once
+    private int lastProcessedActionIndex = 0;
+    // Suspicion Meter
+    private IdentityTracker identityTracker;
 
     /**
      * Determines the strategy for dealing with the randomness of a die roll.
@@ -108,6 +121,8 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
      *
      * @param game to add information to
      */
+
+    /*
     private void addInformationToGame(HeimlichAndCo game) {
         //we need to determinize the tree, i.e. add information that is secret that the game hid from us
         //here we just guess
@@ -127,6 +142,76 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
             }
         }
     }
+
+     */
+
+    /**
+     * Determinizes the game state by assigning identities and cards based on suspicion.
+     */
+    private void addInformationToGame(HeimlichAndCo game) {
+        // Synchronize trackers with latest game events
+        syncTrackers(game);
+
+        // Update the identity suspicion scores based on the new sync data
+        if (identityTracker == null) {
+            identityTracker = new IdentityTracker(game.getNumberOfPlayers(), diceTracker);
+        }
+        identityTracker.calculateSuspicion();
+
+        Map<Integer, Agent> playersToAgentsMap = game.getPlayersToAgentsMap();
+        List<Agent> availableAgents = new LinkedList<>(Arrays.asList(game.getBoard().getAgents()));
+
+        // Remove our own agent from the assignment pool
+        availableAgents.remove(playersToAgentsMap.get(this.playerId));
+
+        // Greedy Identity Assignment: match the highest suspicion pairs first
+        List<Integer> opponents = new ArrayList<>();
+        for (int i = 0; i < game.getNumberOfPlayers(); i++) {
+            if (i != this.playerId) opponents.add(i);
+        }
+
+        while (!opponents.isEmpty() && !availableAgents.isEmpty()) {
+            int bestOpp = -1;
+            Agent bestAgent = null;
+            double maxScore = -1.0;
+
+            for (int oppID : opponents) {
+                for (Agent agent : availableAgents) {
+                    double score = identityTracker.getSuspicion(oppID, agent);
+                    if (score > maxScore) {
+                        maxScore = score;
+                        bestOpp = oppID;
+                        bestAgent = agent;
+                    }
+                }
+            }
+
+            if (bestOpp != -1) {
+                playersToAgentsMap.put(bestOpp, bestAgent);
+                availableAgents.remove(bestAgent);
+                opponents.remove(Integer.valueOf(bestOpp));
+            }
+        }
+
+        // Rational Card Assignment using the hidden pool
+        if (game.isWithCards()) {
+            List<HeimlichAndCoCard> hiddenPool = cardTracker.getHiddenPool(game.getCards().get(this.playerId));
+            Collections.shuffle(hiddenPool);
+
+            for (int i = 0; i < game.getNumberOfPlayers(); i++) {
+                if (i == this.playerId) continue;
+
+                int handSize = cardTracker.getPlayerCardCount(i);
+                List<HeimlichAndCoCard> guessedHand = new LinkedList<>();
+                for (int k = 0; k < handSize && !hiddenPool.isEmpty(); k++) {
+                    guessedHand.add(hiddenPool.remove(0));
+                }
+                game.getCards().put(i, guessedHand);
+            }
+        }
+    }
+
+
 
     private void mctsBackpropagation(MCTSNode node, double reward) {
         log.deb("MctsAgent: In Backpropagation\n");
@@ -175,4 +260,81 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
         // Ensure reward doesn't exceed 1.0 if someone goes slightly over 42
         return Math.min(1.0, reward);
     }
+
+
+    /**
+     * Synchronizes internal trackers by analyzing the ActionRecord history.
+     */
+    private void syncTrackers(HeimlichAndCo game) {
+        List<ActionRecord<HeimlichAndCoAction>> records = game.getActionRecords();
+
+        for (int i = lastProcessedActionIndex; i < records.size(); i++) {
+            ActionRecord<HeimlichAndCoAction> record = records.get(i);
+            int playerID = record.getPlayer();
+            HeimlichAndCoAction action = record.getAction();
+
+            // 1. Deducing figurine movement
+            if (action instanceof HeimlichAndCoAgentMoveAction) {
+                HeimlichAndCoAgentMoveAction move = (HeimlichAndCoAgentMoveAction) action;
+
+                // Capture positions BEFORE applying the action
+                Map<Agent, Integer> posBefore = new HashMap<>(trackedBoard.getAgentsPositions());
+
+                // Rule 6: Track card gains (ruins or "No Move" on 1-3 roll)
+                if (move.movesAgentsIntoRuins(trackedBoard) || move.isNoMoveAction()) {
+                    cardTracker.recordCardGained(playerID);
+                }
+
+                // Apply the move to see the new positions
+                action.applyAction(trackedBoard);
+                Map<Agent, Integer> posAfter = trackedBoard.getAgentsPositions();
+
+                // Compare positions to find the exact moves made
+                Map<Agent, Integer> deducedMoves = new HashMap<>();
+                int numFields = trackedBoard.getNumberOfFields();
+                for (Agent agent : posBefore.keySet()) {
+                    int dist = (posAfter.get(agent) - posBefore.get(agent) + numFields) % numFields;
+                    if (dist > 0) deducedMoves.put(agent, dist);
+                }
+
+                // Update DiceTracker with the deduced movement
+                diceTracker.recordTurnMovement(playerID, deducedMoves);
+
+            }
+            // 2. Identifying played cards
+            else if (action instanceof HeimlichAndCoCardAction) {
+                HeimlichAndCoCardAction cardAction = (HeimlichAndCoCardAction) action;
+
+                if (!cardAction.isSkipCardAction()) {
+                    // Identification via a temporary list
+                    List<HeimlichAndCoCard> identificationList = new LinkedList<>(cardTracker.getTotalCardsInGame());
+                    List<HeimlichAndCoCard> beforeRemoval = new LinkedList<>(identificationList);
+
+                    // The engine's method will remove the specific card played from our list
+                    cardAction.removePlayedCardFromList(identificationList);
+
+                    if (identificationList.size() < beforeRemoval.size()) {
+                        HeimlichAndCoCard playedCard = findMissingCard(beforeRemoval, identificationList);
+                        cardTracker.recordCardPlayed(playerID, playedCard);
+                    }
+                }
+                action.applyAction(trackedBoard);
+            } else {
+                // Keep the trackedBoard in sync for SafeMoves and DieRolls
+                action.applyAction(trackedBoard);
+            }
+        }
+        lastProcessedActionIndex = records.size();
+    }
+
+
+    private HeimlichAndCoCard findMissingCard(List<HeimlichAndCoCard> original, List<HeimlichAndCoCard> reduced) {
+        List<HeimlichAndCoCard> temp = new LinkedList<>(original);
+        for (HeimlichAndCoCard c : reduced) {
+            temp.remove(c);
+        }
+        return temp.get(0);
+    }
+
+
 }

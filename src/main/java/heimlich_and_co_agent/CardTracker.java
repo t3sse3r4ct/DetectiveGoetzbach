@@ -71,4 +71,15 @@ public class CardTracker {
   public int getPlayerCardCount(int playerID) {
     return playerCardCounts[playerID];
   }
+
+
+  /**
+   * Returns a copy of the list of all cards that were initialized at the start of the game.
+   * This is used by the agent to identify which cards are played by opponents.
+   */
+  public List<HeimlichAndCoCard> getTotalCardsInGame() {
+    // Returning a new list copy is safer to prevent accidental modification
+    // of the tracker's internal "universe" list.
+    return new ArrayList<>(totalCardsInGame);
+  }
 }
