@@ -19,6 +19,10 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
      */
     private static final int TERMINATION_DEPTH = 64;
 
+    // Trackers for rational decision-making
+    private DiceTracker diceTracker;
+    private CardTracker cardTracker;
+
     /**
      * Determines the strategy for dealing with the randomness of a die roll.
      * <p>
@@ -37,6 +41,15 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
 
     @Override
     public HeimlichAndCoAction computeNextAction(HeimlichAndCo game, long l, TimeUnit timeUnit) {
+
+        // Initialize trackers on the first turn
+        if (diceTracker == null) {
+            int numPlayers = game.getNumberOfPlayers();
+            diceTracker = new DiceTracker(numPlayers);
+            cardTracker = new CardTracker(numPlayers);
+            log.inf("MctsAgent: Trackers initialized for " + numPlayers + " players.\n");
+        }
+
         log.deb("MctsAgent: Computing next action\n");
         super.setTimers(l, timeUnit);
 
@@ -70,8 +83,8 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
 
                 Pair<MCTSNode, HeimlichAndCoAction> selectionPair = mctsSelection(tree, SIMULATE_ALL_DIE_OUTCOMES);
                 MCTSNode newNode = mctsExpansion(selectionPair.getA(), selectionPair.getB());
-                int win = mctsSimulation(newNode);
-                mctsBackpropagation(newNode, win);
+                double reward = mctsSimulation(newNode);
+                mctsBackpropagation(newNode, reward);
             }
 
             log.inf("MctsAgent: Playouts done from root node: " + tree.getPlayouts() + "\n");
@@ -115,9 +128,9 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
         }
     }
 
-    private void mctsBackpropagation(MCTSNode node, int win) {
+    private void mctsBackpropagation(MCTSNode node, double reward) {
         log.deb("MctsAgent: In Backpropagation\n");
-        node.backpropagation(win);
+        node.backpropagation(reward);
     }
 
     private MCTSNode mctsExpansion(MCTSNode node, HeimlichAndCoAction action) {
@@ -137,7 +150,7 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
      * @param node from where simulation should take place
      * @return 1 or 0, depending on whether the agent belonging to the player of this agent wins
      */
-    private int mctsSimulation(MCTSNode node) {
+    private double mctsSimulation(MCTSNode node) {
         log.deb("MctsAgent: In Simulation\n");
         HeimlichAndCo game = new HeimlichAndCo(node.getGame());
         //use a termination depth were the game is evaluated and stopped
@@ -153,17 +166,13 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
         }
 
         Map<Agent, Integer> scores = game.getBoard().getScores();
-        int maxValue = 0;
-        for (int i : scores.values()) {
-            if (i > maxValue) {
-                maxValue = i;
-            }
-        }
-        //the game is regarded as won if the player has the highest score
-        if (maxValue == scores.get(game.getPlayersToAgentsMap().get(this.playerId))) {
-            return 1;
-        } else {
-            return 0;
-        }
+        int myScore = scores.get(game.getPlayersToAgentsMap().get(this.playerId));
+
+        // Option A: Simple Normalization (0.0 to 1.0)
+        // 42 is the winning score in Heimlich & Co.
+        double reward = (double) myScore / 42.0;
+
+        // Ensure reward doesn't exceed 1.0 if someone goes slightly over 42
+        return Math.min(1.0, reward);
     }
 }

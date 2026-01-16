@@ -43,7 +43,7 @@ public class MCTSNode {
     /**
      * saves how many wins were achieved from this node
      */
-    private int wins;
+    private double wins;
     /**
      * saves how many playouts were done from this node (or descendents of this node)
      */
@@ -51,7 +51,7 @@ public class MCTSNode {
     private final Comparator<HeimlichAndCoAction> actionComparatorUct = Comparator.comparingDouble(this::calculateUCT);
     private final Comparator<HeimlichAndCoAction> actionComparatorQsa = Comparator.comparingDouble(this::calculateQsaOfChild);
 
-    public MCTSNode(int wins, int playouts, HeimlichAndCo game, MCTSNode parent) {
+    public MCTSNode(double wins, int playouts, HeimlichAndCo game, MCTSNode parent) {
         this(game, parent);
         this.wins = wins;
         this.playouts = playouts;
@@ -77,16 +77,16 @@ public class MCTSNode {
      * Does backpropagation starting from the current node.
      * Therefore, always increases playouts and increases wins depending on win.
      *
-     * @param win indicating whether the game was won or not (1 on win, 0 on loss).
+     * @param reward indicating whether the game was won or not (1 on win, 0 on loss).
      */
-    public void backpropagation(int win) {
-        if (win != 0 && win != 1) {
-            throw new IllegalArgumentException("Win must be either 1 or 0");
+    public void backpropagation(double reward) {
+        if (reward < 0.0 && reward > 1.0) {
+            throw new IllegalArgumentException("Reward must be between 0 and 1");
         }
         this.playouts++;
-        this.wins += win;
+        this.wins += reward;
         if (this.parent != null) {
-            this.parent.backpropagation(win);
+            this.parent.backpropagation(reward);
         }
     }
 
@@ -182,7 +182,7 @@ public class MCTSNode {
         return this.playouts;
     }
 
-    public int getWins() {
+    public double getWins() {
         return this.wins;
     }
 
