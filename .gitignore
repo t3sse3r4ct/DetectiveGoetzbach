@@ -40,3 +40,6 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Other Agents ###
+src/main/java/heimlich_and_co_mcts_agent/

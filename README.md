@@ -1,5 +1,7 @@
 This is the MCTS-based agent Detective Götzbach for the Heimlich&Co Boardgame
 
+Creators: Luis Kolvenbach & Martin Götz
+
 Progress: 
 For now, we created the initial setup of the agent repository and did some brainstorming on how we want our agent to act.
 
