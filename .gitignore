@@ -41,5 +41,5 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-### Other Agents ###
-src/main/java/heimlich_and_co_mcts_agent/
+### Other Agents ### we include the other agent in order to make random moves at the beginning
+###src/main/java/heimlich_and_co_mcts_agent/
