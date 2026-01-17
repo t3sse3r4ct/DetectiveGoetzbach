@@ -11,6 +11,8 @@ public class DiceTracker {
   private static final int NUM_AGENTS = 7; // Always 7 figurines in the game
   private static final int MAX_TURNS = 100;
 
+  private int NumbRolls = 0;
+
   /**
    * 3D Array: [PlayerID][AgentID][TurnIndex]
    * Preserves the full chronological history for analyzing strategy patterns.
@@ -58,6 +60,7 @@ public class DiceTracker {
       totalPointsPerAgent[playerID][agentIndex] += pointsAssigned;
     }
 
+    NumbRolls++;
     turnCounters[playerID]++;
   }
 
@@ -94,4 +97,9 @@ public class DiceTracker {
     if (playerID < 0 || playerID >= numPlayers) return 0;
     return turnCounters[playerID];
   }
+
+  public int getNumbRolls(){
+    return NumbRolls;
+  }
+
 }

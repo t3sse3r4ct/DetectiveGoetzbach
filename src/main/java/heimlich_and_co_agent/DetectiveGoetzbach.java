@@ -12,6 +12,7 @@ import heimlich_and_co.actions.HeimlichAndCoAgentMoveAction;
 import heimlich_and_co.actions.HeimlichAndCoCardAction;
 import heimlich_and_co.cards.HeimlichAndCoCard;
 import heimlich_and_co.enums.Agent;
+import heimlich_and_co_mcts_agent.HeimlichAndCoMCTSAgent;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +37,8 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
     // Suspicion Meter
     private IdentityTracker identityTracker;
 
+    private HeimlichAndCoMCTSAgent MCTSAgent;
+
     /**
      * Determines the strategy for dealing with the randomness of a die roll.
      * <p>
@@ -50,6 +53,7 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
 
     public DetectiveGoetzbach(Logger logger) {
         super(logger);
+        MCTSAgent = new HeimlichAndCoMCTSAgent(logger);
     }
 
     @Override
@@ -82,6 +86,11 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
         try {
             log.deb("MctsAgent: Adding information to the game");
             addInformationToGame(game);
+
+            //if less then 10 rolls in the game, we perform a random action with the MCTS Agent
+            if(diceTracker.getNumbRolls() < 10){
+                return MCTSAgent.computeNextAction(game,l,timeUnit);
+            }
 
             if (SIMULATE_ALL_DIE_OUTCOMES) {
                 game.setAllowCustomDieRolls(true);
