@@ -3,11 +3,16 @@ package heimlich_and_co_agent;
 import at.ac.tuwien.ifs.sge.util.pair.ImmutablePair;
 import at.ac.tuwien.ifs.sge.util.pair.Pair;
 import heimlich_and_co.HeimlichAndCo;
+import heimlich_and_co.HeimlichAndCoBoard;
 import heimlich_and_co.actions.HeimlichAndCoAction;
+import heimlich_and_co.actions.HeimlichAndCoAgentMoveAction;
+import heimlich_and_co.actions.HeimlichAndCoCardAction;
 import heimlich_and_co.actions.HeimlichAndCoDieRollAction;
+import heimlich_and_co.enums.Agent;
 import heimlich_and_co.enums.HeimlichAndCoPhase;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class MCTSNode {
 
@@ -143,6 +148,17 @@ public class MCTSNode {
         if (possibleActions.isEmpty()) {
             return new ImmutablePair<>(this, null);
         }
+
+        // --- NEW PRUNING LOGIC ---
+        // If the branching factor is too high (e.g., > 20 actions), prune to top 10
+        if (possibleActions.size() > 20 && game.getCurrentPhase() == HeimlichAndCoPhase.AGENT_MOVE_PHASE) {
+            possibleActions = possibleActions.stream()
+                    .sorted((a1, a2) -> Double.compare(evaluateActionHeuristic(a2, game), evaluateActionHeuristic(a1, game)))
+                    .limit(10)
+                    .collect(Collectors.toSet());
+        }
+        // -------------------------
+
         HeimlichAndCoAction selectedAction;
         if (simulateAllDiceOutcomes && game.getCurrentPhase() == HeimlichAndCoPhase.DIE_ROLL_PHASE) {
             possibleActions.remove(HeimlichAndCoDieRollAction.getRandomRollAction());
@@ -249,6 +265,58 @@ public class MCTSNode {
             }
         }
         return selectedActions;
+    }
+
+    private double evaluateActionHeuristic(HeimlichAndCoAction action, HeimlichAndCo game) {
+        double score = 0.0;
+
+        if (action instanceof HeimlichAndCoAgentMoveAction) {
+            HeimlichAndCoAgentMoveAction move = (HeimlichAndCoAgentMoveAction) action;
+            HeimlichAndCoBoard boardBefore = game.getBoard(); //
+
+            // 1. Highly prioritize scoring round triggers
+            if (move.movesAgentsIntoRuins(boardBefore)) { //
+                score += 100.0;
+            }
+
+            // 2. Evaluate figurine progress by "peeking" at the resulting state
+            HeimlichAndCo nextState = game.doAction(action); //
+            HeimlichAndCoBoard boardAfter = nextState.getBoard();
+
+            Map<Agent, Integer> posBefore = boardBefore.getAgentsPositions(); //
+            Map<Agent, Integer> posAfter = boardAfter.getAgentsPositions();
+
+            Map<Integer, Agent> idMap = game.getPlayersToAgentsMap(); //
+            Agent myAgent = idMap.get(playerId);
+            int numFields = boardBefore.getNumberOfFields(); //
+
+            // Compare positions for all figurines
+            for (Agent agent : Agent.values()) {
+                if (!posBefore.containsKey(agent) || !posAfter.containsKey(agent)) {
+                    continue;
+                }
+
+                int pBefore = posBefore.get(agent);
+                int pAfter = posAfter.get(agent);
+
+                // Calculate distance moved (handling board wrap-around)
+                int dist = (pAfter - pBefore + numFields) % numFields;
+                if (dist == 0) continue;
+
+                if (agent == myAgent) {
+                    score += dist * 5.0; // Moving our own agent is the priority
+                } else if (idMap.containsValue(agent)) {
+                    score -= dist * 3.0; // Moving suspected opponents is penalized
+                } else {
+                    score += dist * 1.0; // Moving dummy agents is a neutral filler strategy
+                }
+            }
+        } else if (action instanceof HeimlichAndCoCardAction) {
+            // Playing a card is typically more strategic than a random die roll
+            score += 20.0;
+        }
+
+        return score;
     }
 
 }

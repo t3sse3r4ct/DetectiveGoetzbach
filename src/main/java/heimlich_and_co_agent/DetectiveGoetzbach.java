@@ -60,6 +60,10 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
             int numPlayers = game.getNumberOfPlayers();
             diceTracker = new DiceTracker(numPlayers);
             cardTracker = new CardTracker(numPlayers);
+
+            //Initialization of trackedBoard
+            this.trackedBoard = new HeimlichAndCoBoard();
+
             log.inf("MctsAgent: Trackers initialized for " + numPlayers + " players.\n");
         }
 
