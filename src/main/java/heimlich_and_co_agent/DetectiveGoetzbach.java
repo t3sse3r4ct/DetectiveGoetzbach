@@ -89,6 +89,7 @@ public class DetectiveGoetzbach extends AbstractGameAgent<HeimlichAndCo, Heimlic
 
             //if less then 10 rolls in the game, we perform a random action with the MCTS Agent
             if(diceTracker.getNumbRolls() < 10){
+                log.deb("this is turn: " + diceTracker.getNumbRolls() + " and we are making a MCTS Agent move");
                 return MCTSAgent.computeNextAction(game,l,timeUnit);
             }
 
